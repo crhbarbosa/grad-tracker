@@ -701,7 +701,7 @@ async function init() {
             if (user) {
                 document.getElementById('header-subtitle').textContent = user.email;
                 showApp();
-                subscribeFirestore();
+                migrateOldStudents(user.uid).then(() => subscribeFirestore());
             } else {
                 showLogin();
                 if (unsubscribeFn) unsubscribeFn();
@@ -738,10 +738,41 @@ window.handleLogout = async () => {
     if (!IS_DEMO) await window._fbAuth.signOut(window._fbAuth.auth);
 };
 
+// ======================== MIGRATION (one-time) ========================
+async function migrateOldStudents(uid) {
+    const { db, collection, doc, setDoc } = _fb;
+    const { getDocs } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+    try {
+        const oldSnap = await getDocs(collection(db, 'students'));
+        if (oldSnap.empty) return; // nothing to migrate
+
+        const { deleteDoc } = _fb;
+        let count = 0;
+        for (const d of oldSnap.docs) {
+            // Copy to new user-scoped path
+            await setDoc(doc(db, `users/${uid}/students`, d.id), d.data());
+            // Remove from old path
+            await deleteDoc(doc(db, 'students', d.id));
+            count++;
+        }
+        if (count > 0) {
+            console.log(`Migrated ${count} students to user-scoped collection.`);
+            alert(`Migration complete: ${count} student(s) moved to your personal database.`);
+        }
+    } catch (err) {
+        console.log('No old data to migrate or migration already done.', err);
+    }
+}
+
 // ======================== FIRESTORE ========================
+function userStudentsPath() {
+    // Each user gets their own subcollection: users/{uid}/students
+    return `users/${_auth.currentUser.uid}/students`;
+}
+
 function subscribeFirestore() {
     const { db, collection, onSnapshot } = _fb;
-    unsubscribeFn = onSnapshot(collection(db, 'students'), snap => {
+    unsubscribeFn = onSnapshot(collection(db, userStudentsPath()), snap => {
         students = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         renderDashboard();
     });
@@ -755,7 +786,7 @@ async function persistStudent(s) {
         renderDashboard();
     } else {
         const { db, doc, setDoc } = _fb;
-        await setDoc(doc(db, 'students', s.id), s);
+        await setDoc(doc(db, userStudentsPath(), s.id), s);
     }
 }
 
@@ -766,7 +797,7 @@ async function removeStudent(id) {
         renderDashboard();
     } else {
         const { db, doc, deleteDoc } = _fb;
-        await deleteDoc(doc(db, 'students', id));
+        await deleteDoc(doc(db, userStudentsPath(), id));
     }
 }
 
