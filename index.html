@@ -428,7 +428,7 @@
                         <option>Coursework</option>
                         <option>Proposal Stage</option>
                         <option>Research</option>
-                        <option>Writing</option>
+                        <option>Pre-Defense</option>
                         <option>Defense Scheduled</option>
                         <option>Defended</option>
                         <option>Completed</option>
@@ -499,21 +499,6 @@
                                 <option value="1">1</option>
                                 <option value="2">2</option>
                                 <option value="3">3</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group" style="grid-column:1/-1">
-                            <label>Dissertation Status *</label>
-                            <select id="f-status" required>
-                                <option value="">Select…</option>
-                                <option>Coursework</option>
-                                <option>Proposal Stage</option>
-                                <option>Research</option>
-                                <option>Writing</option>
-                                <option>Defense Scheduled</option>
-                                <option>Defended</option>
-                                <option>Completed</option>
                             </select>
                         </div>
                     </div>
@@ -640,6 +625,18 @@ function milestonesFor(program) {
     return MILESTONES.filter(m => !m.phdOnly || program === 'PhD');
 }
 
+function computeStatus(milestones, program) {
+    const m = milestones || {};
+    if (m.thesisSubmitted?.done)      return 'Completed';
+    if (m.dissertationDefended?.done) return 'Defended';
+    if (m.defenseScheduled?.done)     return 'Defense Scheduled';
+    if (m.dissertationDone?.done)     return 'Pre-Defense';
+    if (m.proposalDefended?.done)     return 'Research';
+    if (program === 'PhD' && m.qualifyingExam?.done) return 'Proposal Stage';
+    if (m.courseworkComplete?.done)   return 'Proposal Stage';
+    return 'Coursework';
+}
+
 function buildPeriodOptions(selectedValue) {
     let html = '<option value="">Select…</option>';
     for (let yy = 18; yy <= 35; yy++) {
@@ -654,7 +651,7 @@ const STATUS_CLASS = {
     'Coursework':       's-coursework',
     'Proposal Stage':   's-proposal',
     'Research':         's-research',
-    'Writing':          's-writing',
+    'Pre-Defense':      's-writing',
     'Defense Scheduled':'s-scheduled',
     'Defended':         's-defended',
     'Completed':        's-completed',
@@ -792,7 +789,7 @@ function renderDashboard() {
     const yyNow = String(year).slice(-2);
     document.getElementById('stat-total').textContent      = students.length;
     document.getElementById('stat-graduating').textContent = students.filter(s => (s.gradPeriod||'').startsWith(yyNow + '.')).length;
-    document.getElementById('stat-defense').textContent    = students.filter(s => ['Defense Scheduled','Defended'].includes(s.status)).length;
+    document.getElementById('stat-defense').textContent    = students.filter(s => ['Defense Scheduled','Defended'].includes(computeStatus(s.milestones, s.program))).length;
     document.getElementById('stat-manuscripts').textContent= totalMs;
     document.getElementById('stat-ms-sub').textContent     = `${pubMs} published`;
     document.getElementById('stat-grad-sub').textContent   = `Expected ${year}`;
@@ -808,7 +805,7 @@ function renderTable() {
 
     let list = students.filter(s => {
         const matchQ  = !q  || s.name.toLowerCase().includes(q) || (s.dept||'').toLowerCase().includes(q) || (s.disTitle||'').toLowerCase().includes(q);
-        const matchSt = !sf || s.status === sf;
+        const matchSt = !sf || computeStatus(s.milestones, s.program) === sf;
         return matchQ && matchSt;
     });
 
@@ -839,13 +836,14 @@ function renderTable() {
         const msAll  = (s.manuscripts||[]).length;
         const msPub  = (s.manuscripts||[]).filter(m => m.status === 'Published').length;
         const gradTxt = s.gradPeriod || '—';
-        const sCls   = STATUS_CLASS[s.status] || 's-coursework';
+        const sStat  = computeStatus(s.milestones, s.program);
+        const sCls   = STATUS_CLASS[sStat] || 's-coursework';
         return `<tr onclick="openStudentModal('${s.id}')">
             <td>
                 <div class="student-name">${esc(s.name)}</div>
                 <div class="student-meta">${esc(s.program||'')}${s.dept ? ' · ' + esc(s.dept) : ''}</div>
             </td>
-            <td><span class="badge ${sCls}">${esc(s.status||'')}</span></td>
+            <td><span class="badge ${sCls}">${esc(sStat)}</span></td>
             <td class="hide-mobile">${esc(gradTxt)}</td>
             <td class="hide-mobile">
                 <div class="milestone-progress">
@@ -888,7 +886,6 @@ window.openStudentModal = function(id) {
     document.getElementById('f-coadvisor').value = s?.coAdvisor || '';
     document.getElementById('f-regnum').value    = s?.regNum    || '';
     document.getElementById('f-prorrog').value   = s?.prorrogations ?? 0;
-    document.getElementById('f-status').value    = s?.status    || '';
     document.getElementById('f-dis-title').value = s?.disTitle  || '';
     document.getElementById('f-notes').value     = s?.notes     || '';
 
@@ -982,7 +979,6 @@ window.saveStudent = async function() {
         prorrogations: +document.getElementById('f-prorrog').value,
         startPeriod:   document.getElementById('f-start-period').value,
         gradPeriod:    document.getElementById('f-grad-period').value,
-        status:        document.getElementById('f-status').value,
         disTitle:      document.getElementById('f-dis-title').value.trim(),
         notes:         document.getElementById('f-notes').value.trim(),
         milestones,
@@ -1066,7 +1062,6 @@ function sampleStudents() {
             id: 'demo1', name: 'Jane Smith', program: 'PhD', dept: 'Biology',
             coAdvisor: '', regNum: '20210045', prorrogations: 0,
             startPeriod: '21.1', gradPeriod: '26.1',
-            status: 'Writing',
             disTitle: 'CRISPR-based approaches to gene regulation in model organisms',
             milestones: {
                 courseworkComplete:   { done: true,  date: '2022-05-15' },
@@ -1087,7 +1082,6 @@ function sampleStudents() {
             id: 'demo2', name: 'Marcus Johnson', program: 'PhD', dept: 'Biology',
             coAdvisor: 'Dr. Chen', regNum: '20220103', prorrogations: 0,
             startPeriod: '22.1', gradPeriod: '27.2',
-            status: 'Research',
             disTitle: 'Metabolic reprogramming in the tumor microenvironment',
             milestones: {
                 courseworkComplete:   { done: true,  date: '2023-05-10' },
@@ -1107,7 +1101,6 @@ function sampleStudents() {
             id: 'demo3', name: 'Priya Patel', program: 'MS', dept: 'Biology',
             coAdvisor: '', regNum: '20230211', prorrogations: 1,
             startPeriod: '23.1', gradPeriod: '25.1',
-            status: 'Defense Scheduled',
             disTitle: 'Single-cell transcriptomics of developing cortical neurons',
             milestones: {
                 courseworkComplete:   { done: true,  date: '2023-12-15' },
