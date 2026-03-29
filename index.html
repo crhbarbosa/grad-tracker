@@ -334,6 +334,26 @@
         .fw-600 { font-weight: 600; }
         .flex-gap { display: flex; gap: 0.5rem; }
 
+        /* Admin panel */
+        .admin-panel {
+            background: #fffbeb; border: 1.5px solid #f6d860;
+            border-radius: var(--radius); padding: 1.25rem 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .admin-panel-title { font-weight: 600; margin-bottom: 0.75rem; color: #92400e; font-size: 0.95rem; }
+        .pending-user {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.75rem; background: white; border-radius: var(--radius);
+            border: 1px solid var(--border); margin-bottom: 0.5rem; gap: 1rem;
+        }
+        .pending-user:last-child { margin-bottom: 0; }
+        .pending-user-info { flex: 1; }
+        .pending-user-name { font-weight: 600; font-size: 0.9rem; }
+        .pending-user-email { font-size: 0.8rem; color: var(--text-muted); }
+        .pending-user-date { font-size: 0.75rem; color: var(--text-muted); }
+        .pending-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
+        .alert-success { background: #f0fff4; color: #276749; border: 1px solid #9ae6b4; }
+
         /* ==================== RESPONSIVE ==================== */
         @media (max-width: 768px) {
             .app-main { padding: 1rem; }
@@ -351,20 +371,64 @@
 <div id="login-view">
     <div class="login-card">
         <div class="login-logo">🎓</div>
-        <h1>Graduate Tracker</h1>
-        <p class="subtitle">Sign in to manage your students</p>
-        <div id="login-error" class="alert alert-error hidden"></div>
-        <form id="login-form">
-            <div class="form-group">
-                <label for="email">Email</label>
-                <input type="email" id="email" placeholder="professor@university.edu" required autocomplete="email">
-            </div>
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
-            </div>
-            <button type="submit" class="btn btn-primary btn-full" id="login-btn">Sign In</button>
-        </form>
+        <h1 id="auth-title">Graduate Tracker</h1>
+        <p class="subtitle" id="auth-subtitle">Sign in to manage your students</p>
+        <div id="auth-error" class="alert alert-error hidden"></div>
+        <div id="auth-success" class="alert alert-success hidden"></div>
+
+        <!-- LOGIN FORM -->
+        <div id="login-section">
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" placeholder="professor@university.edu" required autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn btn-primary btn-full" id="login-btn">Sign In</button>
+            </form>
+            <p style="text-align:center;margin-top:1.25rem;font-size:0.85rem;color:var(--text-muted)">
+                Don't have an account? <a href="#" onclick="showRegisterForm()" style="color:var(--accent);font-weight:500">Register</a>
+            </p>
+        </div>
+
+        <!-- REGISTER FORM -->
+        <div id="register-section" class="hidden">
+            <form id="register-form">
+                <div class="form-group">
+                    <label for="reg-name">Full Name</label>
+                    <input type="text" id="reg-name" placeholder="Your full name" required>
+                </div>
+                <div class="form-group">
+                    <label for="reg-email">Email</label>
+                    <input type="email" id="reg-email" placeholder="you@university.edu" required autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label for="reg-password">Password</label>
+                    <input type="password" id="reg-password" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label for="reg-password2">Confirm Password</label>
+                    <input type="password" id="reg-password2" placeholder="Repeat your password" required minlength="6" autocomplete="new-password">
+                </div>
+                <button type="submit" class="btn btn-primary btn-full" id="register-btn">Register</button>
+            </form>
+            <p style="text-align:center;margin-top:1.25rem;font-size:0.85rem;color:var(--text-muted)">
+                Already have an account? <a href="#" onclick="showLoginForm()" style="color:var(--accent);font-weight:500">Sign in</a>
+            </p>
+        </div>
+
+        <!-- PENDING APPROVAL MESSAGE -->
+        <div id="pending-section" class="hidden" style="text-align:center;padding:1rem 0">
+            <div style="font-size:2.5rem;margin-bottom:0.75rem">⏳</div>
+            <h2 style="font-size:1.1rem;margin-bottom:0.5rem">Registration Pending</h2>
+            <p style="font-size:0.9rem;color:var(--text-muted);margin-bottom:1.5rem">
+                Your account is awaiting approval from the administrator.<br>You'll receive access once approved.
+            </p>
+            <button class="btn btn-ghost btn-full" onclick="handleLogout();showLoginForm()">Back to Sign In</button>
+        </div>
     </div>
 </div>
 
@@ -392,6 +456,12 @@
     </header>
 
     <main class="app-main">
+        <!-- Admin: pending registrations (visible only to admin) -->
+        <div id="admin-panel" class="admin-panel hidden">
+            <div class="admin-panel-title">Pending Registrations</div>
+            <div id="pending-list"></div>
+        </div>
+
         <!-- Stats row -->
         <div class="stats-grid">
             <div class="stat-card">
@@ -609,6 +679,16 @@ const firebaseConfig = {
 // ================================================================
 
 const IS_DEMO = firebaseConfig.apiKey === "YOUR_API_KEY";
+const ADMIN_EMAIL = "hall@puc-rio.br";
+
+// EmailJS config (optional — for email notifications on new registrations)
+// Sign up free at https://www.emailjs.com, then fill in these values:
+const EMAILJS = {
+    serviceId:  "YOUR_EMAILJS_SERVICE_ID",
+    templateId: "YOUR_EMAILJS_TEMPLATE_ID",
+    publicKey:  "YOUR_EMAILJS_PUBLIC_KEY"
+};
+const EMAILJS_ON = EMAILJS.serviceId !== "YOUR_EMAILJS_SERVICE_ID";
 
 // ======================== CONSTANTS ========================
 const MILESTONES = [
@@ -674,6 +754,7 @@ let editingMs = [];       // temp manuscript list while modal open
 let sortField = 'name';
 let sortDir = 1;
 let unsubscribeFn = null;
+let _unsubPending = null;
 
 // Firebase handles (null in demo mode)
 let _auth = null;
@@ -687,37 +768,87 @@ async function init() {
         showApp();
         loadLocal();
     } else {
-        const { initializeApp }                              = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js');
-        const { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
-        const { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc }     = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js');
+        const { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged }
+            = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+        const { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs }
+            = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
 
         const app = initializeApp(firebaseConfig);
         _auth = getAuth(app);
-        _fb   = { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, db: getFirestore(app) };
+        _fb   = { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, db: getFirestore(app) };
 
-        window._fbAuth = { signInWithEmailAndPassword, signOut, auth: _auth };
+        window._fbAuth = { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, auth: _auth };
 
-        onAuthStateChanged(_auth, user => {
+        onAuthStateChanged(_auth, async user => {
             if (user) {
+                const isAdmin = user.email === ADMIN_EMAIL;
+
+                if (!isAdmin) {
+                    // Check if user is approved
+                    const approvalDoc = await getDoc(doc(_fb.db, 'approved', user.uid));
+                    if (!approvalDoc.exists()) {
+                        // Not approved yet — show pending message
+                        showPending();
+                        return;
+                    }
+                }
+
                 document.getElementById('header-subtitle').textContent = user.email;
                 showApp();
                 subscribeFirestore();
+
+                if (isAdmin) subscribePendingRegistrations();
             } else {
                 showLogin();
                 if (unsubscribeFn) unsubscribeFn();
+                if (_unsubPending) _unsubPending();
             }
         });
     }
 }
 
-function showApp()  { document.getElementById('login-view').classList.remove('active'); document.getElementById('app-view').classList.add('active'); }
-function showLogin(){ document.getElementById('login-view').classList.add('active');    document.getElementById('app-view').classList.remove('active'); }
+function showApp() {
+    document.getElementById('login-view').classList.remove('active');
+    document.getElementById('app-view').classList.add('active');
+}
+function showLogin() {
+    document.getElementById('login-view').classList.add('active');
+    document.getElementById('app-view').classList.remove('active');
+    document.getElementById('pending-section').classList.add('hidden');
+    document.getElementById('login-section').classList.remove('hidden');
+}
+function showPending() {
+    document.getElementById('login-view').classList.add('active');
+    document.getElementById('app-view').classList.remove('active');
+    document.getElementById('login-section').classList.add('hidden');
+    document.getElementById('register-section').classList.add('hidden');
+    document.getElementById('pending-section').classList.remove('hidden');
+}
+
+window.showRegisterForm = function() {
+    document.getElementById('login-section').classList.add('hidden');
+    document.getElementById('register-section').classList.remove('hidden');
+    document.getElementById('auth-title').textContent = 'Create Account';
+    document.getElementById('auth-subtitle').textContent = 'Register to track your students';
+    document.getElementById('auth-error').classList.add('hidden');
+    document.getElementById('auth-success').classList.add('hidden');
+};
+window.showLoginForm = function() {
+    document.getElementById('register-section').classList.add('hidden');
+    document.getElementById('pending-section').classList.add('hidden');
+    document.getElementById('login-section').classList.remove('hidden');
+    document.getElementById('auth-title').textContent = 'Graduate Tracker';
+    document.getElementById('auth-subtitle').textContent = 'Sign in to manage your students';
+    document.getElementById('auth-error').classList.add('hidden');
+    document.getElementById('auth-success').classList.add('hidden');
+};
 
 // ======================== AUTH ========================
 document.getElementById('login-form').addEventListener('submit', async e => {
     e.preventDefault();
     const btn  = document.getElementById('login-btn');
-    const errEl = document.getElementById('login-error');
+    const errEl = document.getElementById('auth-error');
     errEl.classList.add('hidden');
     btn.innerHTML = '<span class="spinner"></span> Signing in…';
     btn.disabled  = true;
@@ -734,8 +865,115 @@ document.getElementById('login-form').addEventListener('submit', async e => {
     }
 });
 
+// ======================== REGISTRATION ========================
+document.getElementById('register-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const errEl = document.getElementById('auth-error');
+    const sucEl = document.getElementById('auth-success');
+    errEl.classList.add('hidden');
+    sucEl.classList.add('hidden');
+    const btn = document.getElementById('register-btn');
+
+    const name  = document.getElementById('reg-name').value.trim();
+    const email = document.getElementById('reg-email').value.trim();
+    const pw    = document.getElementById('reg-password').value;
+    const pw2   = document.getElementById('reg-password2').value;
+
+    if (pw !== pw2) { errEl.textContent = 'Passwords do not match.'; errEl.classList.remove('hidden'); return; }
+
+    btn.innerHTML = '<span class="spinner"></span> Registering…';
+    btn.disabled = true;
+    try {
+        const { createUserWithEmailAndPassword, auth } = window._fbAuth;
+        const cred = await createUserWithEmailAndPassword(auth, email, pw);
+
+        // Save registration request in Firestore
+        const { db, doc, setDoc } = _fb;
+        await setDoc(doc(db, 'registrations', cred.user.uid), {
+            name, email,
+            registeredAt: new Date().toISOString()
+        });
+
+        // Send email notification to admin (if EmailJS configured)
+        if (EMAILJS_ON) {
+            fetch('https://api.emailjs.com/api/v1.0/email/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    service_id:  EMAILJS.serviceId,
+                    template_id: EMAILJS.templateId,
+                    user_id:     EMAILJS.publicKey,
+                    template_params: {
+                        to_email:   ADMIN_EMAIL,
+                        user_name:  name,
+                        user_email: email,
+                        message:    `${name} (${email}) has registered for Graduate Tracker and is awaiting your approval.`
+                    }
+                })
+            }).catch(() => {});
+        }
+
+        // Sign out — user can't use app until approved
+        await window._fbAuth.signOut(window._fbAuth.auth);
+
+        showLoginForm();
+        sucEl.textContent = 'Registration submitted! You will receive access once the administrator approves your account.';
+        sucEl.classList.remove('hidden');
+    } catch (err) {
+        errEl.textContent = err.code === 'auth/email-already-in-use'
+            ? 'An account with this email already exists.'
+            : err.message;
+        errEl.classList.remove('hidden');
+    } finally {
+        btn.textContent = 'Register';
+        btn.disabled = false;
+    }
+});
+
 window.handleLogout = async () => {
     if (!IS_DEMO) await window._fbAuth.signOut(window._fbAuth.auth);
+};
+
+// ======================== ADMIN: PENDING REGISTRATIONS ========================
+function subscribePendingRegistrations() {
+    const { db, collection, onSnapshot } = _fb;
+    _unsubPending = onSnapshot(collection(db, 'registrations'), snap => {
+        const panel = document.getElementById('admin-panel');
+        const list  = document.getElementById('pending-list');
+        if (snap.empty) {
+            panel.classList.add('hidden');
+            return;
+        }
+        panel.classList.remove('hidden');
+        list.innerHTML = snap.docs.map(d => {
+            const r = d.data();
+            const date = r.registeredAt ? new Date(r.registeredAt).toLocaleDateString() : '';
+            return `<div class="pending-user">
+                <div class="pending-user-info">
+                    <div class="pending-user-name">${esc(r.name)}</div>
+                    <div class="pending-user-email">${esc(r.email)}</div>
+                    <div class="pending-user-date">Registered ${esc(date)}</div>
+                </div>
+                <div class="pending-actions">
+                    <button class="btn btn-primary btn-sm" onclick="approveUser('${d.id}','${esc(r.email)}')">Approve</button>
+                    <button class="btn btn-danger btn-sm" onclick="rejectUser('${d.id}','${esc(r.name)}')">Reject</button>
+                </div>
+            </div>`;
+        }).join('');
+    });
+}
+
+window.approveUser = async function(uid, email) {
+    if (!confirm(`Approve ${email}?`)) return;
+    const { db, doc, setDoc, deleteDoc } = _fb;
+    await setDoc(doc(db, 'approved', uid), { approvedAt: new Date().toISOString() });
+    await deleteDoc(doc(db, 'registrations', uid));
+};
+
+window.rejectUser = async function(uid, name) {
+    if (!confirm(`Reject and remove ${name}'s registration?`)) return;
+    const { db, doc, deleteDoc } = _fb;
+    await deleteDoc(doc(db, 'registrations', uid));
 };
 
 // ======================== FIRESTORE ========================
